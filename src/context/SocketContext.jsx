@@ -24,7 +24,7 @@ export const SocketContextProvider = ({ children }) => {
         if (userInfo) {
             // 1. Establish the bidirectional pipeline. `withCredentials: true` is strictly required 
             // since our Node server enforces HTTP-only securely signed cookies for Auth!
-            const socketInstance = io('http://localhost:5000', {
+            const socketInstance = io('http://k8s-realtime-realtime-88ceff4f5e-581866777.ap-south-1.elb.amazonaws.com', {
                 withCredentials: true,
             });
 
