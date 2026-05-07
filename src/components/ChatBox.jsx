@@ -4,7 +4,7 @@ import { MessageSquare, Send, Paperclip, Loader2, X, ArrowLeft, Check, CheckChec
 import axios from 'axios';
 import { useSocketContext } from '../context/SocketContext';
 import { setSelectedChat } from '../features/chatSlice';
-
+// sfsde
 const ChatBox = () => {
     const dispatch = useDispatch();
     const selectedChat = useSelector(state => state.chat.selectedChat);
@@ -38,13 +38,13 @@ const ChatBox = () => {
             const { data } = await axios.get(`/api/messages/${selectedChat._id}`, { withCredentials: true });
             setMessages(data);
             setLoading(false);
-            if(socket) socket.emit('join_chat', selectedChat._id);
-            
+            if (socket) socket.emit('join_chat', selectedChat._id);
+
             // Mark as read natively
             const hasUnread = data.some(m => m.sender._id !== userInfo._id && !(Array.isArray(m.readBy) ? m.readBy : []).some(uid => String(uid._id || uid) === String(userInfo._id)));
             if (hasUnread) {
                 await axios.put('/api/messages/read', { chatId: selectedChat._id }, { withCredentials: true });
-                if(socket) socket.emit('mark_read', { chatId: selectedChat._id, userId: userInfo._id });
+                if (socket) socket.emit('mark_read', { chatId: selectedChat._id, userId: userInfo._id });
             }
 
         } catch (error) {
@@ -63,15 +63,15 @@ const ChatBox = () => {
     }, [messages]);
 
     useEffect(() => {
-        if(!socket) return;
-        
+        if (!socket) return;
+
         const messageReceivedHandler = (newMessageReceived) => {
             if (!selectedChat || selectedChat._id !== newMessageReceived.chat._id) {
                 // TODO: Systematically dispatch a Redux global UI Toast notification natively if the user is looking at another screen!
             } else {
                 // Immediately inject the message onto our live DOM array
                 setMessages((prev) => [...prev, newMessageReceived]);
-                
+
                 // Emitting the Seen hook since the user actively has their eyeballs rendering this chat room frame actively!
                 socket.emit("mark_read", { chatId: selectedChat._id, userId: userInfo._id });
                 axios.put('/api/messages/read', { chatId: selectedChat._id }, { withCredentials: true }).catch(e => console.log(e));
@@ -124,7 +124,7 @@ const ChatBox = () => {
         setUploading(true);
         const formData = new FormData();
         formData.append('media', file);
-        
+
         let type = 'file';
         if (file.type.startsWith('image')) type = 'image';
         else if (file.type.startsWith('video')) type = 'video';
@@ -134,7 +134,7 @@ const ChatBox = () => {
             const { data } = await axios.post('/api/messages/upload', formData, {
                 withCredentials: true,
             });
-            
+
             const messageData = {
                 content: file.name,
                 chatId: selectedChat._id,
@@ -150,23 +150,23 @@ const ChatBox = () => {
             alert("File upload failed!");
         } finally {
             setUploading(false);
-            if(fileInputRef.current) fileInputRef.current.value = '';
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
     const sendMessage = async (e) => {
         e?.preventDefault();
-        if(!newMessage.trim()) return;
+        if (!newMessage.trim()) return;
         socket.emit("stop_typing", selectedChat._id);
-        
+
         try {
             const content = newMessage;
             setNewMessage("");
-            const { data } = await axios.post('/api/messages', 
-                { content, chatId: selectedChat._id }, 
+            const { data } = await axios.post('/api/messages',
+                { content, chatId: selectedChat._id },
                 { withCredentials: true }
             );
-            
+
             socket.emit("new_message", data);
             setMessages([...messages, data]);
         } catch (error) {
@@ -176,9 +176,9 @@ const ChatBox = () => {
 
     const typingHandler = (e) => {
         setNewMessage(e.target.value);
-        if(!socket) return;
+        if (!socket) return;
 
-        if(!typing){
+        if (!typing) {
             setTyping(true);
             socket.emit("typing", selectedChat._id);
         }
@@ -188,7 +188,7 @@ const ChatBox = () => {
         setTimeout(() => {
             var timeNow = new Date().getTime();
             var timeDiff = timeNow - lastTypingTime;
-            if(timeDiff >= timerLength && typing){
+            if (timeDiff >= timerLength && typing) {
                 socket.emit("stop_typing", selectedChat._id);
                 setTyping(false);
             }
@@ -218,7 +218,7 @@ const ChatBox = () => {
             <div className="h-16 border-b border-gray-200 dark:border-gray-700/60 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md flex items-center px-4 sm:px-6 sticky top-0 z-10 shadow-sm flex-shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3">
                     <button onClick={() => dispatch(setSelectedChat(null))} className="md:hidden p-1.5 -ml-1 mr-1 text-gray-500 hover:bg-white/50 dark:hover:bg-gray-700 rounded-full transition-colors shadow-sm bg-white dark:bg-gray-800 outline outline-1 outline-gray-200 dark:outline-gray-700">
-                        <ArrowLeft className="w-4 h-4"/>
+                        <ArrowLeft className="w-4 h-4" />
                     </button>
                     <img src={chatPic} className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 object-cover" />
                     <h3 className="font-semibold text-base sm:text-lg text-gray-800 dark:text-gray-100 truncate flex-1 min-w-0 max-w-[200px]">
@@ -227,7 +227,7 @@ const ChatBox = () => {
                     <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse ml-2 shadow-[0_0_8px_rgba(34,197,94,0.6)] flex-shrink-0"></div>
                 </div>
             </div>
-            
+
             {/* Messages Area */}
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col no-scrollbar">
                 {loading ? (
@@ -241,13 +241,13 @@ const ChatBox = () => {
                             <div key={m._id} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
                                 <div className={`${isMyMessage ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-tl-sm'} px-4 py-2 rounded-2xl shadow-sm max-w-[70%]`}>
                                     {!isMyMessage && selectedChat.isGroupChat && <p className="text-[10px] font-bold mb-1 opacity-70">{m.sender.username}</p>}
-                                    
+
                                     {m.mediaUrl && (
                                         <div className="mb-2 w-full relative group">
                                             {m.type === 'image' ? (
-                                                <img src={m.mediaUrl} onLoad={scrollToBottom} alt="attachment" className="max-w-full max-h-64 rounded-xl object-contain cursor-pointer transition-transform hover:scale-[1.02]" onClick={() => setFullScreenMedia({type: 'image', url: m.mediaUrl})} />
+                                                <img src={m.mediaUrl} onLoad={scrollToBottom} alt="attachment" className="max-w-full max-h-64 rounded-xl object-contain cursor-pointer transition-transform hover:scale-[1.02]" onClick={() => setFullScreenMedia({ type: 'image', url: m.mediaUrl })} />
                                             ) : m.type === 'video' ? (
-                                                <div className="relative inline-block cursor-pointer" onClick={() => setFullScreenMedia({type: 'video', url: m.mediaUrl})}>
+                                                <div className="relative inline-block cursor-pointer" onClick={() => setFullScreenMedia({ type: 'video', url: m.mediaUrl })}>
                                                     <video src={m.mediaUrl} onLoadedMetadata={scrollToBottom} className="max-w-full max-h-64 rounded-xl opacity-90 group-hover:opacity-100 transition-opacity pointer-events-none"></video>
                                                     <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl group-hover:bg-black/10 transition">
                                                         <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/50">
@@ -256,7 +256,7 @@ const ChatBox = () => {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="underline text-sm font-semibold flex items-center gap-1.5"><Paperclip className="w-4 h-4"/> {m.content || 'Download File'}</a>
+                                                <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="underline text-sm font-semibold flex items-center gap-1.5"><Paperclip className="w-4 h-4" /> {m.content || 'Download File'}</a>
                                             )}
                                         </div>
                                     )}
@@ -270,12 +270,12 @@ const ChatBox = () => {
                                             (() => {
                                                 const readByArray = Array.isArray(m.readBy) ? m.readBy : [];
                                                 const isSeen = readByArray.some(obj => String(obj._id || obj) !== String(userInfo._id));
-                                                
+
                                                 if (isSeen) return <CheckCheck className="w-4 h-4 text-cyan-300 drop-shadow-md" strokeWidth={3} />;
-                                                
+
                                                 const receiver = selectedChat.users.find(u => String(u._id) !== String(userInfo._id));
                                                 const isDelivered = onlineUsers.includes(receiver?._id);
-                                                
+
                                                 if (isDelivered) return <CheckCheck className="w-4 h-4 text-indigo-300" opacity={0.8} strokeWidth={2} />;
                                                 return <Check className="w-4 h-4 text-indigo-300" opacity={0.8} strokeWidth={2} />;
                                             })()
@@ -286,13 +286,13 @@ const ChatBox = () => {
                         )
                     })
                 )}
-                
+
                 {isTyping && (
                     <div className="flex justify-start">
                         <div className="bg-white dark:bg-gray-700 px-4 py-3 rounded-2xl rounded-tl-sm shadow-sm flex gap-1">
                             <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: "0.2s"}}></span>
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: "0.4s"}}></span>
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></span>
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }}></span>
                         </div>
                     </div>
                 )}
@@ -301,19 +301,19 @@ const ChatBox = () => {
             {/* Input Form Frame: Glassmorphism Footer containing dynamic S3 upload triggers and standard text transmission logic */}
             <div className="p-3 sm:p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border-t border-gray-200 dark:border-gray-700/60 flex-shrink-0 pb-6 sm:pb-4">
                 <form onSubmit={sendMessage} className="flex items-center gap-1 sm:gap-3 w-full max-w-4xl mx-auto relative rounded-full bg-white dark:bg-gray-700 shadow border border-gray-100 dark:border-gray-600 px-1 sm:px-2 py-1.5 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-                    <input 
-                        type="file" 
+                    <input
+                        type="file"
                         accept="image/*,video/*,application/pdf"
-                        className="hidden" 
+                        className="hidden"
                         ref={fileInputRef}
                         onChange={handleFileChange}
                     />
                     <button type="button" onClick={() => fileInputRef.current?.click()} className="p-1 sm:p-2 text-gray-400 hover:text-indigo-500 transition-colors ml-0.5 sm:ml-1 rounded-full hover:bg-gray-50 dark:hover:bg-gray-600">
                         {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />}
                     </button>
-                    <input 
-                        type="text" 
-                        placeholder="Type your message..." 
+                    <input
+                        type="text"
+                        placeholder="Type your message..."
                         value={newMessage}
                         onChange={typingHandler}
                         className="flex-1 min-w-0 bg-transparent border-none outline-none text-gray-800 dark:text-gray-100 placeholder-gray-400 text-[13px] sm:text-sm h-10 px-1 sm:px-2"
@@ -327,7 +327,7 @@ const ChatBox = () => {
             {/* Fullscreen Media Viewer */}
             {fullScreenMedia && (
                 <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in zoom-in-95 duration-200" onClick={() => setFullScreenMedia(null)}>
-                    <button className="absolute top-6 right-6 text-white p-2 hover:bg-white/20 rounded-full transition cursor-pointer"><X className="w-8 h-8"/></button>
+                    <button className="absolute top-6 right-6 text-white p-2 hover:bg-white/20 rounded-full transition cursor-pointer"><X className="w-8 h-8" /></button>
                     {fullScreenMedia.type === 'image' ? (
                         <img src={fullScreenMedia.url} className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.5)]" onClick={e => e.stopPropagation()} />
                     ) : (
