@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://k8s-realtime-realtime-88ceff4f5e-581866777.ap-south-1.elb.amazonaws.com',
         changeOrigin: true,
       },
     },
