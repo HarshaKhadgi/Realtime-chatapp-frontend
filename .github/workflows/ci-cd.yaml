@@ -1,132 +1,460 @@
-name: CI / CD — Build → DevSecOps → ECR → GitOps (ArgoCD)
+# name: CI / CD — Build → DevSecOps → ECR → GitOps (ArgoCD)
 
-# Run on push to main (customize branches) and PRs
+# # Run on push to main (customize branches) and PRs
+# on:
+#   push:
+#     branches: ["master"]
+#   pull_request:
+#     branches: ["master"]
+#   workflow_dispatch:
+
+# env:
+#   ECR_REGISTRY: ${{secrets.AWS_ACCOUNT_ID}}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+#   REALTIME_CHATAPP_FRONTEND_REPO: realtime-chatapp-frontend
+
+# permissions:
+#   contents: write
+#   id-token: write # required for OIDC to AWS
+#   issues: write
+#   pull-requests: write
+
+# jobs:
+#   checkout:
+#     name: Checkout + Cache
+#     runs-on: ubuntu-latest
+#     outputs:
+#       commit: ${{ steps.commit.outputs.sha }}
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
+
+#       - name: Set commit output
+#         id: commit
+#         run: echo "sha=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+
+#   build-realtime-chatapp-frontend:
+#     name: Build & Push Realtime-chatapp Frontend
+#     runs-on: ubuntu-latest
+#     needs: checkout
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: aws-actions/configure-aws-credentials@v3
+#         with:
+#           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+#           aws-region: ${{ secrets.AWS_REGION }}
+#       - uses: aws-actions/amazon-ecr-login@v1
+#       - name: Configure Docker to use ECR credentials
+#         run: |
+#           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{secrets.AWS_ACCOUNT_ID}}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+#       - name: Build and push
+#         run: |
+#           TAG=${{ needs.checkout.outputs.commit }}-${{ github.run_number }}
+#           IMAGE=${{ env.ECR_REGISTRY }}/${{ env.REALTIME_CHATAPP_FRONTEND_REPO }}:$TAG
+#           echo "Building image: $IMAGE"
+#           docker build -t $IMAGE .
+#           docker push $IMAGE
+
+#   update-manifests:
+#     name: Update K8s Manifests
+#     runs-on: ubuntu-latest
+#     needs: [checkout, build-realtime-chatapp-frontend]
+#     if: github.ref == 'refs/heads/master'
+#     steps:
+#       - uses: actions/checkout@v4
+#         with:
+#           token: ${{ secrets.GITHUB_TOKEN }}
+#       - name: Update manifest files
+#         run: |
+#           TAG=${{ needs.checkout.outputs.commit }}-${{ github.run_number }}
+#           REALTIME_CHATAPP_FRONTEND_IMAGE=${{ env.ECR_REGISTRY }}/${{ env.REALTIME_CHATAPP_FRONTEND_REPO }}:$TAG
+
+#           echo "Updating manifests with tag: $TAG"
+
+#           sed -i "s|image: .*|image: $REALTIME_CHATAPP_FRONTEND_IMAGE|" k8s/deployment.yaml
+
+#           git config --local user.email "action@github.com"
+#           git config --local user.name "GitHub Action"
+#           git add k8s/
+#           git commit -m "Update image tags to $TAG" || exit 0
+#           git push
+
+#   notify-argocd:
+#     name: Notify ArgoCD for Deployment
+#     runs-on: ubuntu-latest
+#     needs: update-manifests
+#     if: github.ref == 'refs/heads/master'
+#     steps:
+#       - name: Trigger ArgoCD Sync
+#         run: |
+#           curl -k -X POST -u ${{ secrets.ARGOCD_USERNAME }}:${{ secrets.ARGOCD_PASSWORD }} \
+#           https://${{ secrets.ARGOCD_HOST }}/api/v1/applications/${{ secrets.ARGOCD_APP_NAME }}/sync
+
+#   cleanup:
+#     name: Cleanup Docker Images
+#     runs-on: ubuntu-latest
+#     needs: [build-realtime-chatapp-frontend, update-manifests]
+#     if: always()
+#     steps:
+#       - uses: aws-actions/configure-aws-credentials@v3
+#         with:
+#           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+#           aws-region: ${{ secrets.AWS_REGION }}
+#       - name: Delete old ECR images
+#         run: |
+#           for repo in ${{ env.REALTIME_CHATAPP_FRONTEND_REPO }}; do
+#             echo "Processing repository: $repo"
+            
+#             # Get total image count
+#             TOTAL_IMAGES=$(aws ecr list-images --repository-name $repo --query 'length(imageIds)' --output text)
+#             echo "Total images in $repo: $TOTAL_IMAGES"
+            
+#             if [ "$TOTAL_IMAGES" -gt 2 ]; then
+#               # Get old images (keep only latest 2)
+#               OLD_IMAGES=$(aws ecr describe-images --repository-name $repo --query 'sort_by(imageDetails,&imagePushedAt)[:-2].[imageDigest,imageTags[0]]' --output json | jq -r '.[] | {imageDigest: .[0], imageTag: .[1]}')
+#               echo "Old images to delete in $repo: $OLD_IMAGES"
+              
+#               # Delete old images one by one
+#               aws ecr describe-images --repository-name $repo --query 'sort_by(imageDetails,&imagePushedAt)[:-2].imageDigest' --output text | tr '\t' '\n' | while read digest; do
+#                 if [ -n "$digest" ]; then
+#                   echo "Deleting image with digest: $digest"
+#                   aws ecr batch-delete-image --repository-name $repo --image-ids imageDigest=$digest
+#                 fi
+#               done
+#             else
+#               echo "Only $TOTAL_IMAGES images in $repo, keeping all"
+#             fi
+#           done
+#       - name: Delete local Docker images
+#         run: |
+#           docker system prune -af
+#           docker image prune -af
+
+# ============================================With DevSecOps===================================================
+
+name: CI / CD — React Vite Frontend → DevSecOps → ECR → GitOps (ArgoCD)
+
 on:
   push:
     branches: ["master"]
+
   pull_request:
     branches: ["master"]
+
   workflow_dispatch:
 
 env:
-  ECR_REGISTRY: ${{secrets.AWS_ACCOUNT_ID}}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-  REALTIME_CHATAPP_FRONTEND_REPO: realtime-chatapp-frontend
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+  FRONTEND_REPO: fareshare-frontend
+
+  IMAGE_TAG: ${{ github.sha }}-${{ github.run_number }}
 
 permissions:
+  id-token: write
   contents: write
-  id-token: write # required for OIDC to AWS
-  issues: write
+  security-events: write
+  actions: read
   pull-requests: write
+  issues: write
 
 jobs:
-  checkout:
-    name: Checkout + Cache
+
+  # =========================================================
+  # CHECKOUT + NODE SETUP
+  # =========================================================
+  setup:
+    name: Checkout & Setup
     runs-on: ubuntu-latest
+
     outputs:
-      commit: ${{ steps.commit.outputs.sha }}
+      commit_sha: ${{ steps.vars.outputs.sha }}
+
     steps:
-      - name: Checkout repo
+      - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set commit output
-        id: commit
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Save Commit SHA
+        id: vars
         run: echo "sha=${GITHUB_SHA}" >> $GITHUB_OUTPUT
 
-  build-realtime-chatapp-frontend:
-    name: Build & Push Realtime-chatapp Frontend
+  # =========================================================
+  # REACT BUILD VALIDATION
+  # =========================================================
+  build:
+    name: React Build Validation
     runs-on: ubuntu-latest
-    needs: checkout
+    needs: setup
+
     steps:
       - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # - name: Run ESLint
+      #   run: npm run lint
+
+      - name: Run Production Build
+        run: npm run build
+
+  # =========================================================
+  # SONARQUBE STATIC CODE ANALYSIS
+  # =========================================================
+  sonarqube:
+    name: SonarQube Scan
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  # =========================================================
+  # OWASP DEPENDENCY CHECK
+  # =========================================================
+  owasp-dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "fareshare-frontend"
+          path: "."
+          format: "HTML"
+          out: "reports"
+
+      - name: Upload OWASP Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-dependency-check-report
+          path: reports
+
+  # =========================================================
+  # TRIVY FILESYSTEM SCAN
+  # =========================================================
+  trivy-filesystem:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy Filesystem Scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          exit-code: "1"
+
+  # =========================================================
+  # AWS LOGIN + ECR AUTH
+  # =========================================================
+  docker-build-push:
+    name: Build Docker Image & Push to ECR
+    runs-on: ubuntu-latest
+
+    needs:
+      - sonarqube
+      - owasp-dependency-check
+      - trivy-filesystem
+
+    outputs:
+      image_uri: ${{ steps.image.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # AWS OIDC Authentication
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-      - uses: aws-actions/amazon-ecr-login@v1
-      - name: Configure Docker to use ECR credentials
-        run: |
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{secrets.AWS_ACCOUNT_ID}}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-      - name: Build and push
-        run: |
-          TAG=${{ needs.checkout.outputs.commit }}-${{ github.run_number }}
-          IMAGE=${{ env.ECR_REGISTRY }}/${{ env.REALTIME_CHATAPP_FRONTEND_REPO }}:$TAG
-          echo "Building image: $IMAGE"
-          docker build -t $IMAGE .
-          docker push $IMAGE
+          aws-region: ${{ env.AWS_REGION }}
 
+      # Login to ECR
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Docker Build
+      - name: Build Docker Image
+        run: |
+          IMAGE_URI=${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
+
+          echo "Building image: $IMAGE_URI"
+
+          docker build -t $IMAGE_URI .
+
+      # =====================================================
+      # TRIVY IMAGE SCAN
+      # =====================================================
+      - name: Run Trivy Image Scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      # Push Image
+      - name: Push Docker Image to ECR
+        run: |
+          IMAGE_URI=${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
+
+          docker push $IMAGE_URI
+
+      - name: Save Image URI
+        id: image
+        run: |
+          echo "image=${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ env.IMAGE_TAG }}" >> $GITHUB_OUTPUT
+
+  # =========================================================
+  # UPDATE KUBERNETES MANIFESTS (GITOPS)
+  # =========================================================
   update-manifests:
-    name: Update K8s Manifests
+    name: Update Kubernetes Manifest
     runs-on: ubuntu-latest
-    needs: [checkout, build-realtime-chatapp-frontend]
+
+    needs: docker-build-push
+
     if: github.ref == 'refs/heads/master'
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Update manifest files
+
+      - name: Update Deployment YAML
         run: |
-          TAG=${{ needs.checkout.outputs.commit }}-${{ github.run_number }}
-          REALTIME_CHATAPP_FRONTEND_IMAGE=${{ env.ECR_REGISTRY }}/${{ env.REALTIME_CHATAPP_FRONTEND_REPO }}:$TAG
+          IMAGE_URI=${{ needs.docker-build-push.outputs.image_uri }}
 
-          echo "Updating manifests with tag: $TAG"
+          echo "Updating deployment with image:"
+          echo "$IMAGE_URI"
 
-          sed -i "s|image: .*|image: $REALTIME_CHATAPP_FRONTEND_IMAGE|" k8s/deployment.yaml
+          sed -i "s|image: .*|image: $IMAGE_URI|g" k8s/deployment.yaml
 
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add k8s/
-          git commit -m "Update image tags to $TAG" || exit 0
+      - name: Commit Updated Manifest
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "github-actions"
+
+          git add k8s/deployment.yaml
+
+          git commit -m "Update frontend image to ${{ env.IMAGE_TAG }}" || exit 0
+
           git push
 
+  # =========================================================
+  # ARGOCD SYNC
+  # =========================================================
   notify-argocd:
-    name: Notify ArgoCD for Deployment
+    name: Trigger ArgoCD Sync
     runs-on: ubuntu-latest
-    needs: update-manifests
-    if: github.ref == 'refs/heads/master'
-    steps:
-      - name: Trigger ArgoCD Sync
-        run: |
-          curl -k -X POST -u ${{ secrets.ARGOCD_USERNAME }}:${{ secrets.ARGOCD_PASSWORD }} \
-          https://${{ secrets.ARGOCD_HOST }}/api/v1/applications/${{ secrets.ARGOCD_APP_NAME }}/sync
 
-  cleanup:
-    name: Cleanup Docker Images
-    runs-on: ubuntu-latest
-    needs: [build-realtime-chatapp-frontend, update-manifests]
-    if: always()
+    needs: update-manifests
+
+    if: github.ref == 'refs/heads/master'
+
     steps:
-      - uses: aws-actions/configure-aws-credentials@v3
+      - name: Sync ArgoCD Application
+        run: |
+          curl -k -X POST \
+            -u ${{ secrets.ARGOCD_USERNAME }}:${{ secrets.ARGOCD_PASSWORD }} \
+            https://${{ secrets.ARGOCD_HOST }}/api/v1/applications/${{ secrets.ARGOCD_APP_NAME }}/sync
+
+  # =========================================================
+  # CLEANUP
+  # =========================================================
+  cleanup:
+    name: Cleanup Old Docker Images
+    runs-on: ubuntu-latest
+
+    needs:
+      - docker-build-push
+      - update-manifests
+
+    if: always()
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-      - name: Delete old ECR images
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Cleanup Old ECR Images
         run: |
-          for repo in ${{ env.REALTIME_CHATAPP_FRONTEND_REPO }}; do
-            echo "Processing repository: $repo"
-            
-            # Get total image count
-            TOTAL_IMAGES=$(aws ecr list-images --repository-name $repo --query 'length(imageIds)' --output text)
-            echo "Total images in $repo: $TOTAL_IMAGES"
-            
-            if [ "$TOTAL_IMAGES" -gt 2 ]; then
-              # Get old images (keep only latest 2)
-              OLD_IMAGES=$(aws ecr describe-images --repository-name $repo --query 'sort_by(imageDetails,&imagePushedAt)[:-2].[imageDigest,imageTags[0]]' --output json | jq -r '.[] | {imageDigest: .[0], imageTag: .[1]}')
-              echo "Old images to delete in $repo: $OLD_IMAGES"
-              
-              # Delete old images one by one
-              aws ecr describe-images --repository-name $repo --query 'sort_by(imageDetails,&imagePushedAt)[:-2].imageDigest' --output text | tr '\t' '\n' | while read digest; do
-                if [ -n "$digest" ]; then
-                  echo "Deleting image with digest: $digest"
-                  aws ecr batch-delete-image --repository-name $repo --image-ids imageDigest=$digest
+
+          REPO=${{ env.FRONTEND_REPO }}
+
+          TOTAL_IMAGES=$(aws ecr list-images \
+            --repository-name $REPO \
+            --query 'length(imageIds)' \
+            --output text)
+
+          echo "Total Images: $TOTAL_IMAGES"
+
+          if [ "$TOTAL_IMAGES" -gt 5 ]; then
+
+            echo "Deleting old images..."
+
+            aws ecr describe-images \
+              --repository-name $REPO \
+              --query 'sort_by(imageDetails,&imagePushedAt)[:-5].imageDigest' \
+              --output text | tr '\t' '\n' | while read digest; do
+
+                if [ ! -z "$digest" ]; then
+
+                  aws ecr batch-delete-image \
+                    --repository-name $REPO \
+                    --image-ids imageDigest=$digest
+
                 fi
+
               done
-            else
-              echo "Only $TOTAL_IMAGES images in $repo, keeping all"
-            fi
-          done
-      - name: Delete local Docker images
+
+          else
+            echo "Less than 5 images available. Skipping cleanup."
+          fi
+
+      - name: Cleanup Local Docker Cache
         run: |
           docker system prune -af
           docker image prune -af
