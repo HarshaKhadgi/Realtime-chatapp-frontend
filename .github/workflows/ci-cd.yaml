@@ -367,7 +367,7 @@ jobs:
 
       - name: Update Deployment YAML
         run: |
-          IMAGE_URI=${{ needs.docker-build-push.outputs.image_uri }}
+          IMAGE_URI=${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
 
           echo "Updating deployment with image:"
           echo "$IMAGE_URI"
