@@ -185,8 +185,8 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install Dependencies
-        run: npm ci
+      # - name: Install Dependencies
+      #   run: npm ci
 
       - name: Save Commit SHA
         id: vars
@@ -208,8 +208,8 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install Dependencies
-        run: npm ci
+      # - name: Install Dependencies
+      #   run: npm ci
 
       # - name: Run ESLint
       #   run: npm run lint
